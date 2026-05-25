@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Smart PDF Converter</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
+<style>
+  :root { --primary: #2563eb; }
+  body { font-family: system-ui, -apple-system, sans-serif; }
+  [dir="rtl"] { font-family: system-ui, Arial, sans-serif; }
+  .tab-btn { transition: all .2s; }
+  .tab-btn.active { background: white; box-shadow: 0 1px 3px rgba(0,0,0,.15); border-radius: .5rem; }
+  .drop-zone { border: 2px dashed #93c5fd; border-radius: 1rem; transition: all .2s; cursor: pointer; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: #2563eb; background: #eff6ff; }
+  .img-card { position: relative; width: 7rem; border-radius: .75rem; overflow: hidden; border: 2px solid #e5e7eb; cursor: grab; }
+  .img-card:hover .card-overlay { opacity: 1; }
+  .card-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.35); opacity: 0; transition: opacity .2s; display: flex; align-items: flex-start; justify-content: flex-end; padding: .25rem; }
+  .sortable-ghost { opacity: .4; }
+  .spinner { border: 3px solid #e5e7eb; border-top-color: #2563eb; border-radius: 50%; width: 2rem; height: 2rem; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  select, button { outline: none; }
+  .page-thumb { border-radius: .75rem; overflow: hidden; border: 1px solid #e5e7eb; position: relative; }
+  .page-thumb:hover .dl-btn { opacity: 1; }
+  .dl-btn { position: absolute; inset: 0; background: rgba(0,0,0,.3); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity .2s; }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- Header -->
+<header class="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+  <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold text-gray-900">Smart PDF Converter</h1>
+        <p id="subtitle" class="text-xs text-gray-500"></p>
+      </div>
+    </div>
+    <div class="relative">
+      <button onclick="toggleLangMenu()" class="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white hover:bg-gray-50">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" stroke-linejoin="round" d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>
+        <span id="lang-label">🇺🇸 English</span>
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </button>
+      <div id="lang-menu" class="hidden absolute right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-50 w-36">
+        <button class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50" onclick="setLang('en')">🇺🇸 English</button>
+        <button class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50" onclick="setLang('ar')">🇸🇦 العربية</button>
+        <button class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50" onclick="setLang('fr')">🇫🇷 Français</button>
+        <button class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50" onclick="setLang('es')">🇪🇸 Español</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-4xl mx-auto px-4 py-8">
+
+  <!-- Tabs -->
+  <div class="bg-gray-100 p-1 rounded-xl flex gap-1 mb-6">
+    <button id="tab1-btn" class="tab-btn active flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-gray-700" onclick="switchTab('img-to-pdf')">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      <span id="tab1-label"></span>
+    </button>
+    <button id="tab2-btn" class="tab-btn flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-gray-500" onclick="switchTab('pdf-to-img')">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      <span id="tab2-label"></span>
+    </button>
+  </div>
+
+  <!-- TAB 1: Image to PDF -->
+  <div id="tab-img-to-pdf">
+    <!-- Upload Zone -->
+    <div id="drop-zone-img" class="drop-zone p-12 flex flex-col items-center justify-center gap-4 mb-6" onclick="document.getElementById('img-input').click()">
+      <div class="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      </div>
+      <div class="text-center">
+        <p id="upload-img-label" class="text-lg font-semibold text-gray-800"></p>
+        <p class="text-sm text-gray-400 mt-1">JPG · PNG · WEBP</p>
+      </div>
+      <input id="img-input" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden" onchange="addImages(this.files)" />
+    </div>
+
+    <!-- Image List -->
+    <div id="img-section" class="hidden space-y-5">
+      <div class="flex items-center justify-between">
+        <p id="img-count" class="text-sm font-medium text-gray-700"></p>
+        <button onclick="clearImages()" class="text-sm text-gray-500 hover:text-red-500 flex items-center gap-1">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path stroke-linecap="round" stroke-linejoin="round" d="M19 6l-1 14H6L5 6"/><path stroke-linecap="round" stroke-linejoin="round" d="M10 11v6M14 11v6"/><path stroke-linecap="round" stroke-linejoin="round" d="M9 6V4h6v2"/></svg>
+          <span id="clear-all-label"></span>
+        </button>
+      </div>
+
+      <!-- Sortable thumbnails -->
+      <div id="sortable-list" class="flex flex-wrap gap-3"></div>
+
+      <!-- Options -->
+      <div class="flex flex-wrap gap-6 items-center p-4 rounded-xl bg-gray-50 border border-gray-200">
+        <div class="flex items-center gap-2">
+          <span id="page-size-label" class="text-sm text-gray-600"></span>
+          <select id="page-size" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white">
+            <option value="fit" id="opt-fit"></option>
+            <option value="a4-portrait" id="opt-a4p"></option>
+            <option value="a4-landscape" id="opt-a4l"></option>
+          </select>
+        </div>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <div class="relative">
+            <input id="compress-toggle" type="checkbox" class="sr-only peer" />
+            <div class="w-10 h-5 bg-gray-200 peer-checked:bg-blue-600 rounded-full transition-colors"></div>
+            <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5"></div>
+          </div>
+          <span id="compress-label" class="text-sm text-gray-600"></span>
+        </label>
+      </div>
+
+      <!-- Convert Button -->
+      <button id="convert-btn" onclick="convertToPDF()" class="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center gap-2 text-base transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        <span id="convert-label"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- TAB 2: PDF to Images -->
+  <div id="tab-pdf-to-img" class="hidden">
+    <div id="drop-zone-pdf" class="drop-zone p-12 flex flex-col items-center justify-center gap-4 mb-6" onclick="document.getElementById('pdf-input').click()">
+      <div class="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      </div>
+      <div class="text-center">
+        <p id="upload-pdf-label" class="text-lg font-semibold text-gray-800"></p>
+        <p class="text-sm text-gray-400 mt-1">PDF</p>
+      </div>
+      <input id="pdf-input" type="file" accept="application/pdf" class="hidden" onchange="handlePDF(this.files[0])" />
+    </div>
+
+    <div id="pdf-loading" class="hidden flex items-center justify-center gap-3 py-8">
+      <div class="spinner"></div>
+      <span id="extracting-label" class="text-gray-500"></span>
+    </div>
+
+    <div id="pdf-results" class="hidden space-y-4">
+      <div class="flex items-center justify-between">
+        <p id="pages-count" class="text-sm font-medium text-gray-700"></p>
+        <div class="flex gap-2">
+          <button onclick="clearPDF()" class="text-sm text-gray-500 hover:text-red-500 flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+            <span id="clear-label"></span>
+          </button>
+          <button onclick="downloadAll()" class="text-sm text-white bg-blue-600 hover:bg-blue-700 flex items-center gap-1 border border-blue-600 rounded-lg px-3 py-1.5 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            <span id="download-all-label"></span>
+          </button>
+        </div>
+      </div>
+      <div id="pages-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"></div>
+    </div>
+  </div>
+
+  <p id="privacy-text" class="mt-16 text-center text-xs text-gray-400 pb-8"></p>
+</main>
+
+<script>
+// ─── Translations ─────────────────────────────────────────────────────────────
+const T = {
+  en: {
+    subtitle: "Fast & secure — everything runs in your browser",
+    tab1: "Images → PDF", tab2: "PDF → Images",
+    uploadImg: "Choose images or drag & drop here",
+    uploadPdf: "Choose a PDF file or drag & drop here",
+    selected: n => `${n} image${n!==1?'s':''} selected`,
+    clearAll: "Clear All", pageSz: "Page size:", fitImg: "Fit to Image",
+    a4p: "A4 Portrait", a4l: "A4 Landscape", compress: "Compress output",
+    convert: "Convert to PDF", converting: "Converting...",
+    extracting: "Extracting pages...",
+    pages: (n,f) => `${n} page${n!==1?'s':''} from ${f}`,
+    dlAll: "Download All", clear: "Clear", page: "Page",
+    privacy: "No files are uploaded to any server — your privacy is 100% protected",
+    langLabel: "🇺🇸 English"
+  },
+  ar: {
+    subtitle: "تحويل سريع وآمن — كل شيء يتم في متصفحك",
+    tab1: "صور → PDF", tab2: "PDF → صور",
+    uploadImg: "اختر الصور أو اسحبها هنا",
+    uploadPdf: "اختر ملف PDF أو اسحبه هنا",
+    selected: n => `${n} صورة محددة`,
+    clearAll: "مسح الكل", pageSz: "حجم الصفحة:", fitImg: "مطابق للصورة",
+    a4p: "A4 عمودي", a4l: "A4 أفقي", compress: "ضغط الملف",
+    convert: "تحويل إلى PDF", converting: "جاري التحويل...",
+    extracting: "جاري استخراج الصفحات...",
+    pages: (n,f) => `${n} صفحة من ${f}`,
+    dlAll: "تحميل الكل", clear: "مسح", page: "صفحة",
+    privacy: "لا يتم رفع أي ملف إلى الخادم — خصوصيتك محمية ١٠٠٪",
+    langLabel: "🇸🇦 العربية"
+  },
+  fr: {
+    subtitle: "Rapide et sécurisé — tout se passe dans votre navigateur",
+    tab1: "Images → PDF", tab2: "PDF → Images",
+    uploadImg: "Choisissez des images ou glissez-déposez ici",
+    uploadPdf: "Choisissez un PDF ou glissez-déposez ici",
+    selected: n => `${n} image${n!==1?'s':''} sélectionnée${n!==1?'s':''}`,
+    clearAll: "Tout effacer", pageSz: "Format :", fitImg: "Adapter à l'image",
+    a4p: "A4 Portrait", a4l: "A4 Paysage", compress: "Compresser",
+    convert: "Convertir en PDF", converting: "Conversion...",
+    extracting: "Extraction des pages...",
+    pages: (n,f) => `${n} page${n!==1?'s':''} de ${f}`,
+    dlAll: "Tout télécharger", clear: "Effacer", page: "Page",
+    privacy: "Aucun fichier n'est envoyé au serveur — confidentialité 100% garantie",
+    langLabel: "🇫🇷 Français"
+  },
+  es: {
+    subtitle: "Rápido y seguro — todo se procesa en tu navegador",
+    tab1: "Imágenes → PDF", tab2: "PDF → Imágenes",
+    uploadImg: "Elige imágenes o arrástralas aquí",
+    uploadPdf: "Elige un PDF o arrástralo aquí",
+    selected: n => `${n} imagen${n!==1?'es':''} seleccionada${n!==1?'s':''}`,
+    clearAll: "Borrar todo", pageSz: "Tamaño:", fitImg: "Ajustar a imagen",
+    a4p: "A4 Vertical", a4l: "A4 Horizontal", compress: "Comprimir",
+    convert: "Convertir a PDF", converting: "Convirtiendo...",
+    extracting: "Extrayendo páginas...",
+    pages: (n,f) => `${n} página${n!==1?'s':''} de ${f}`,
+    dlAll: "Descargar todo", clear: "Borrar", page: "Página",
+    privacy: "Ningún archivo se sube al servidor — privacidad 100% protegida",
+    langLabel: "🇪🇸 Español"
+  }
+};
+
+let currentLang = 'en';
+let imageFiles = [];
+let extractedPages = [];
+let sortable;
+
+function t() { return T[currentLang]; }
+
+function setLang(lang) {
+  currentLang = lang;
+  document.getElementById('lang-menu').classList.add('hidden');
+  document.documentElement.lang = lang;
+  document.body.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  applyTranslations();
+}
+
+function toggleLangMenu() {
+  document.getElementById('lang-menu').classList.toggle('hidden');
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.relative')) {
+    document.getElementById('lang-menu').classList.add('hidden');
+  }
+});
+
+function applyTranslations() {
+  const tr = t();
+  document.getElementById('subtitle').textContent = tr.subtitle;
+  document.getElementById('tab1-label').textContent = tr.tab1;
+  document.getElementById('tab2-label').textContent = tr.tab2;
+  document.getElementById('upload-img-label').textContent = tr.uploadImg;
+  document.getElementById('upload-pdf-label').textContent = tr.uploadPdf;
+  document.getElementById('clear-all-label').textContent = tr.clearAll;
+  document.getElementById('page-size-label').textContent = tr.pageSz;
+  document.getElementById('opt-fit').textContent = tr.fitImg;
+  document.getElementById('opt-a4p').textContent = tr.a4p;
+  document.getElementById('opt-a4l').textContent = tr.a4l;
+  document.getElementById('compress-label').textContent = tr.compress;
+  document.getElementById('convert-label').textContent = tr.convert;
+  document.getElementById('extracting-label').textContent = tr.extracting;
+  document.getElementById('clear-label').textContent = tr.clear;
+  document.getElementById('download-all-label').textContent = tr.dlAll;
+  document.getElementById('privacy-text').textContent = tr.privacy;
+  document.getElementById('lang-label').textContent = tr.langLabel;
+  // Update dynamic texts
+  if (imageFiles.length) {
+    document.getElementById('img-count').textContent = tr.selected(imageFiles.length);
+  }
+  if (extractedPages.length) {
+    document.getElementById('pages-count').textContent = tr.pages(extractedPages.length, currentPdfName);
+  }
+}
+
+// ─── Tab switching ────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.getElementById('tab-img-to-pdf').classList.toggle('hidden', tab !== 'img-to-pdf');
+  document.getElementById('tab-pdf-to-img').classList.toggle('hidden', tab !== 'pdf-to-img');
+  document.getElementById('tab1-btn').classList.toggle('active', tab === 'img-to-pdf');
+  document.getElementById('tab1-btn').classList.toggle('text-gray-700', tab === 'img-to-pdf');
+  document.getElementById('tab1-btn').classList.toggle('text-gray-500', tab !== 'img-to-pdf');
+  document.getElementById('tab2-btn').classList.toggle('active', tab !== 'img-to-pdf');
+  document.getElementById('tab2-btn').classList.toggle('text-gray-700', tab !== 'img-to-pdf');
+  document.getElementById('tab2-btn').classList.toggle('text-gray-500', tab === 'img-to-pdf');
+}
+
+// ─── Drag & Drop zones ────────────────────────────────────────────────────────
+['drop-zone-img','drop-zone-pdf'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
+  el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+  el.addEventListener('drop', e => {
+    e.preventDefault(); el.classList.remove('drag-over');
+    const files = Array.from(e.dataTransfer.files);
+    if (id === 'drop-zone-img') addImages(files);
+    else handlePDF(files[0]);
+  });
+});
+
+// ─── IMAGE → PDF ─────────────────────────────────────────────────────────────
+function addImages(files) {
+  const valid = Array.from(files).filter(f => ['image/jpeg','image/png','image/webp'].includes(f.type));
+  imageFiles = [...imageFiles, ...valid];
+  renderThumbnails();
+  document.getElementById('img-section').classList.toggle('hidden', imageFiles.length === 0);
+  document.getElementById('img-count').textContent = t().selected(imageFiles.length);
+}
+
+function renderThumbnails() {
+  const list = document.getElementById('sortable-list');
+  list.innerHTML = '';
+  imageFiles.forEach((file, i) => {
+    const url = URL.createObjectURL(file);
+    const card = document.createElement('div');
+    card.className = 'img-card';
+    card.dataset.index = i;
+    card.innerHTML = `
+      <div class="card-overlay">
+        <button onclick="removeImage(${i})" class="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs hover:bg-red-600">✕</button>
+      </div>
+      <img src="${url}" class="w-full h-24 object-cover" onload="URL.revokeObjectURL(this.src)" />
+      <div class="p-1.5 text-center">
+        <p class="text-[10px] text-gray-400">${formatSize(file.size)}</p>
+        <p class="text-xs font-semibold text-gray-700">${i+1}</p>
+      </div>`;
+    list.appendChild(card);
+  });
+  if (!sortable) {
+    sortable = Sortable.create(list, {
+      animation: 150,
+      ghostClass: 'sortable-ghost',
+      onEnd: (evt) => {
+        const moved = imageFiles.splice(evt.oldIndex, 1)[0];
+        imageFiles.splice(evt.newIndex, 0, moved);
+        renderThumbnails();
+        document.getElementById('img-count').textContent = t().selected(imageFiles.length);
+      }
+    });
+  }
+}
+
+function removeImage(i) {
+  imageFiles.splice(i, 1);
+  renderThumbnails();
+  document.getElementById('img-section').classList.toggle('hidden', imageFiles.length === 0);
+  if (imageFiles.length) document.getElementById('img-count').textContent = t().selected(imageFiles.length);
+}
+
+function clearImages() {
+  imageFiles = [];
+  document.getElementById('sortable-list').innerHTML = '';
+  document.getElementById('img-section').classList.add('hidden');
+}
+
+function formatSize(bytes) {
+  if (bytes < 1048576) return (bytes/1024).toFixed(1)+' KB';
+  return (bytes/1048576).toFixed(1)+' MB';
+}
+
+async function convertToPDF() {
+  if (!imageFiles.length) return;
+  const btn = document.getElementById('convert-btn');
+  btn.disabled = true;
+  btn.innerHTML = `<div class="spinner" style="width:1.25rem;height:1.25rem;border-width:2px;border-top-color:white;border-color:rgba(255,255,255,.3)"></div><span>${t().converting}</span>`;
+
+  const { jsPDF } = window.jspdf;
+  const pageSize = document.getElementById('page-size').value;
+  const compress = document.getElementById('compress-toggle').checked;
+  const PX_TO_MM = 0.264583;
+  let pdf = null;
+
+  for (let i = 0; i < imageFiles.length; i++) {
+    const { dataUrl, w, h } = await loadImage(imageFiles[i], compress);
+    let pageW, pageH, imgX, imgY, imgW, imgH;
+
+    if (pageSize === 'fit') {
+      pageW = w * PX_TO_MM; pageH = h * PX_TO_MM;
+      imgX = 0; imgY = 0; imgW = pageW; imgH = pageH;
+    } else {
+      const landscape = pageSize === 'a4-landscape';
+      pageW = landscape ? 297 : 210; pageH = landscape ? 210 : 297;
+      const ir = w/h, pr = pageW/pageH;
+      if (ir > pr) { imgW = pageW; imgH = pageW/ir; }
+      else { imgH = pageH; imgW = pageH*ir; }
+      imgX = (pageW-imgW)/2; imgY = (pageH-imgH)/2;
+    }
+
+    const orient = pageW >= pageH ? 'landscape' : 'portrait';
+    if (i === 0) pdf = new jsPDF({ orientation: orient, unit: 'mm', format: [pageW, pageH] });
+    else pdf.addPage([pageW, pageH], orient);
+    pdf.addImage(dataUrl, 'PNG', imgX, imgY, imgW, imgH);
+  }
+
+  pdf.save('converted.pdf');
+  btn.disabled = false;
+  btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg><span>${t().convert}</span>`;
+}
+
+function loadImage(file, compress) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width; canvas.height = img.height;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        resolve({ dataUrl: canvas.toDataURL(compress ? 'image/jpeg' : 'image/png', compress ? 0.75 : 1), w: img.width, h: img.height });
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ─── PDF → IMAGES ─────────────────────────────────────────────────────────────
+let currentPdfName = '';
+
+async function loadPdfJs() {
+  if (window.pdfjsLib) return window.pdfjsLib;
+  await new Promise(res => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = res; document.head.appendChild(s);
+  });
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  return window.pdfjsLib;
+}
+
+async function handlePDF(file) {
+  if (!file || file.type !== 'application/pdf') return;
+  currentPdfName = file.name;
+  document.getElementById('pdf-loading').classList.remove('hidden');
+  document.getElementById('pdf-results').classList.add('hidden');
+  extractedPages = [];
+
+  const pdfjsLib = await loadPdfJs();
+  const data = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data }).promise;
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    extractedPages.push(canvas.toDataURL('image/png'));
+  }
+
+  document.getElementById('pdf-loading').classList.add('hidden');
+  document.getElementById('pages-count').textContent = t().pages(extractedPages.length, file.name);
+  renderPages();
+  document.getElementById('pdf-results').classList.remove('hidden');
+}
+
+function renderPages() {
+  const grid = document.getElementById('pages-grid');
+  grid.innerHTML = '';
+  extractedPages.forEach((src, i) => {
+    const div = document.createElement('div');
+    div.className = 'page-thumb';
+    div.innerHTML = `
+      <img src="${src}" class="w-full h-auto" />
+      <div class="dl-btn">
+        <button onclick="downloadPage(${i})" class="bg-white text-gray-800 text-xs font-medium px-3 py-1.5 rounded-lg shadow hover:bg-gray-100">⬇ ${t().page} ${i+1}</button>
+      </div>
+      <p class="text-center text-xs font-medium py-1.5 text-gray-600">${t().page} ${i+1}</p>`;
+    grid.appendChild(div);
+  });
+}
+
+function downloadPage(i) {
+  const a = document.createElement('a');
+  a.href = extractedPages[i];
+  a.download = `page-${i+1}.png`;
+  a.click();
+}
+
+function downloadAll() {
+  extractedPages.forEach((_, i) => downloadPage(i));
+}
+
+function clearPDF() {
+  extractedPages = [];
+  currentPdfName = '';
+  document.getElementById('pdf-results').classList.add('hidden');
+  document.getElementById('pdf-input').value = '';
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+applyTranslations();
+</script>
+</body>
+</html>
